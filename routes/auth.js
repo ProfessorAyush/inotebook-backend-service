@@ -1,53 +1,49 @@
 const express = require("express");
-const User = require("../models/User");
 const router = express.Router();
 const { body, validationResult } = require("express-validator");
 const bcrypt = require("bcryptjs");
-var jwt = require("jsonwebtoken");
+const jwt = require("jsonwebtoken");
+
+const User = require("../models/User");
 const fetchuser = require("../middleware/fetchuser");
 
-const JWT_SECRET = "AYUSHISAGOODBOY";
+const JWT_SECRET = process.env.JWT_SECRET || "AYUSHISAGOODBOY"; // Use env variable in production
 
-// Route 1 create user /api/auth/createuser
+// ROUTE 1: Create a new user using: POST "/api/auth/createuser"
 router.post(
   "/createuser",
   [
     body("name", "Enter a valid name").isLength({ min: 3 }),
     body("email", "Enter a valid email").isEmail(),
-    body("password", "Password must be at least 5 chars").isLength({ min: 5 }),
+    body("password", "Password must be at least 5 characters").isLength({ min: 5 }),
   ],
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+      return res.status(400).json({ success: false, errors: errors.array() });
     }
 
     try {
-      // check if email already exists
       let user = await User.findOne({ email: req.body.email });
       if (user) {
         return res
           .status(400)
-          .json({ error: "User with this email already exists" });
+          .json({ success: false, error: "User with this email already exists" });
       }
 
       const salt = await bcrypt.genSalt(10);
-      const secPass = await bcrypt.hash(req.body.password, salt);
-      // create new user
+      const hashedPassword = await bcrypt.hash(req.body.password, salt);
+
       user = await User.create({
         name: req.body.name,
         email: req.body.email,
-        password: secPass,
+        password: hashedPassword,
       });
 
-      const data = {
-        user: {
-          id: user.id,
-        },
-      };
-      const authtoken = jwt.sign(data, JWT_SECRET);
-      res.json({ authtoken });
-      // res.json(user);
+      const data = { user: { id: user.id } };
+      const authtoken = jwt.sign(data, JWT_SECRET, { expiresIn: "7d" }); // token expiry added
+
+      res.json({ success: true, authtoken });
     } catch (err) {
       console.error(err.message);
       res.status(500).send("Internal Server Error");
@@ -55,42 +51,42 @@ router.post(
   }
 );
 
-//login Route 2 api/auth/login
+// ROUTE 2: Authenticate a user using: POST "/api/auth/login"
 router.post(
   "/login",
   [
     body("email", "Enter a valid email").isEmail(),
-    body("password", "Password must not be empty").exists(),
+    body("password", "Password cannot be empty").exists(),
   ],
   async (req, res) => {
-    //if there are errors, return bad requests and the error
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      res.status(400).json({ errors: errors.array() });
+      return res.status(400).json({ success: false, errors: errors.array() });
     }
+
     const { email, password } = req.body;
+
     try {
       let user = await User.findOne({ email });
       if (!user) {
-        return res
-          .status(400)
-          .json({ error: "Please try to login with correct Credentials" });
+        return res.status(400).json({
+          success: false,
+          error: "Please try to login with correct credentials",
+        });
       }
 
-      const passwordCompare = await bcrypt.compare(password, user.password);
-      if (!passwordCompare) {
-        return res
-          .status(400)
-          .json({ error: "Please try to login with correct Credentials" });
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch) {
+        return res.status(400).json({
+          success: false,
+          error: "Please try to login with correct credentials",
+        });
       }
 
-      const data = {
-        user: {
-          id: user.id,
-        },
-      };
-      const authtoken = jwt.sign(data, JWT_SECRET);
-      res.json({ authtoken });
+      const data = { user: { id: user.id } };
+      const authtoken = jwt.sign(data, JWT_SECRET, { expiresIn: "7d" });
+
+      res.json({ success: true, authtoken });
     } catch (err) {
       console.error(err.message);
       res.status(500).send("Internal Server Error");
@@ -98,13 +94,14 @@ router.post(
   }
 );
 
-//Route 3 get loggedin user detail  useing post "api/auth/getuser". No login require
+// ROUTE 3: Get logged-in user details using: POST "/api/auth/getuser"
 router.post("/getuser", fetchuser, async (req, res) => {
   try {
-    userId = req.user.id;
+    const userId = req.user.id; // added const keyword
     const user = await User.findById(userId).select("-password");
-    res.send(user);
+    res.json({ success: true, user });
   } catch (error) {
+    console.error(error.message);
     res.status(500).send("Internal Server Error");
   }
 });
