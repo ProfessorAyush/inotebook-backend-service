@@ -7,7 +7,7 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const fetchuser = require("../middleware/fetchuser");
 
-const JWT_SECRET = process.env.JWT_SECRET || "AYUSHISAGOODBOY"; // Use env variable in production
+const JWT_SECRET = process.env.JWT_SECRET; // Use env variable in production
 
 // ROUTE 1: Create a new user using: POST "/api/auth/createuser"
 router.post(
